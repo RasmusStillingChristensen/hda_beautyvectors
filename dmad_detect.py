@@ -106,49 +106,52 @@ def detect_morph_differentially(suspected_morph_file_path: str, label: ImageLabe
 	return_code=ReturnCode.Success
 	is_morph=False
 	score=0
-
-	# Load the suspect morph image
-	sus_img=cv2.imread(suspected_morph_file_path)
-	sus_img=crop_and_align_face(sus_img)
-	if sus_img is None:
-		return_code = ReturnCode.FaceDetectionError
-		return return_code, is_morph, score
-	sus_img_array_vgg = preprocess_image_VGG16(sus_img)
-	sus_img_array_arc = preprocess_image_arcface(sus_img)
+	try:
+		# Load the suspect morph image
+		sus_img=cv2.imread(suspected_morph_file_path)
+		sus_img=crop_and_align_face(sus_img)
+		if sus_img is None:
+			return_code = ReturnCode.FaceDetectionError
+			return return_code, is_morph, score
+		sus_img_array_vgg = preprocess_image_VGG16(sus_img)
+		sus_img_array_arc = preprocess_image_arcface(sus_img)
 							  
 
-    # Load the probe image
-	probe_img=cv2.imread(probe_face_file_path)
-	probe_img=crop_and_align_face(probe_img)
+		# Load the probe image
+		probe_img=cv2.imread(probe_face_file_path)
+		probe_img=crop_and_align_face(probe_img)
 
-	if probe_img is None:
-		return_code = ReturnCode.FaceDetectionError
+		if probe_img is None:
+			return_code = ReturnCode.FaceDetectionError
+			return return_code, is_morph, score
+		probe_img_array_vgg = preprocess_image_VGG16(probe_img)
+		probe_img_array_arc = preprocess_image_arcface(probe_img)	
+	
+		# Detection
+		B_model.setInput(sus_img_array_vgg)
+		B_vector_sus_img = B_model.forward()
+	
+		FR_model.setInput(sus_img_array_arc)
+		FR_vector_sus_img = FR_model.forward()
+	
+		B_model.setInput(probe_img_array_vgg)
+		B_vector_probe_img = B_model.forward()
+	
+		FR_model.setInput(probe_img_array_arc)
+		FR_vector_probe_img = FR_model.forward()
+	
+		sus_features = np.concatenate((B_vector_sus_img,FR_vector_sus_img))
+		sus_features = sus_features.reshape(1,1024)
+		probe_features = np.concatenate((B_vector_probe_img,FR_vector_probe_img))
+		probe_features = probe_features.reshape(1,1024)
+		diff_vector = sus_features - probe_features
+	
+		probabilities = SVM_model.predict_proba(diff_vector)
+		score = float(probabilities[0,1])
+		if score>0.5 : is_morph = True
+	except Exception as e:
+		return_code=ReturnCode.UnknownError
 		return return_code, is_morph, score
-	probe_img_array_vgg = preprocess_image_VGG16(probe_img)
-	probe_img_array_arc = preprocess_image_arcface(probe_img)	
-
-    # Detection
-	B_model.setInput(sus_img_array_vgg)
-	B_vector_sus_img = B_model.forward()
-	
-	FR_model.setInput(sus_img_array_arc)
-	FR_vector_sus_img = FR_model.forward()
-	
-	B_model.setInput(probe_img_array_vgg)
-	B_vector_probe_img = B_model.forward()
-	
-	FR_model.setInput(probe_img_array_arc)
-	FR_vector_probe_img = FR_model.forward()
-	
-	sus_features = np.concatenate((B_vector_sus_img,FR_vector_sus_img))
-	sus_features = sus_features.reshape(1,1024)
-	probe_features = np.concatenate((B_vector_probe_img,FR_vector_probe_img))
-	probe_features = probe_features.reshape(1,1024)
-	diff_vector = sus_features - probe_features
-	
-	probabilities = SVM_model.predict_proba(diff_vector)
-	score = float(probabilities[0,1])
-	if score>0.5 : is_morph = True
 
 	return return_code, is_morph, score
 
