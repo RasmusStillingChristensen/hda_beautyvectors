@@ -24,3 +24,11 @@ Image datasets:
 [FRGC](https://paperswithcode.com/dataset/frgc)
 MSYNM
 
+
+The dmad consists of:
+
+Preprocessing images by detecting faces and landmarks using shape_predictor_68_face_landmarks.dat, to crop and align the trusted live capture and the suspected morph.
+
+Extracting feature and beauty vectors using glintr_100.onnx and VGG16_512.onnx.
+
+Computing a difference vector and calculating a score of the likelyhood of the image being a morph from 0 to 1 with one indicating a morphed image. The score is calculated by the SVM_FERET_FRGC_MSYNM.pkl SVM model.
