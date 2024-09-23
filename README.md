@@ -8,6 +8,7 @@ Morphs generated using the morphing methods:
 [FaceMorpher](https://github.com/yaopang/FaceMorpher/tree/master/facemorpher)
 [FaceFusion](http://www.wearemoment.com/FaceFusion)
 [MIPGAN](https://arxiv.org/abs/2009.01729)
+
 Images morphed using the morphing methods come from:
 [FERET](https://www.nist.gov/itl/products-and-services/color-feret-database)
 [FRGC](https://paperswithcode.com/dataset/frgc)
