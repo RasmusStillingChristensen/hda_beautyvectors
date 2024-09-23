@@ -4,15 +4,6 @@ The dmad_detect.py contains code to initialize and detect whether an image is mo
 
 The extra_data folder contains 4 different models:
 
-VGG16_512.onnx
-
-glintr_100.onnx
-
-shape_predictor_68_face_landmarks.dat
-
-SVM_FERET_FRGC_MSYNM.pkl
-
-
 VGG16_512.onnx is a modified VGG16 model trained on [SCUT-FBP5500](https://github.com/HCIILAB/SCUT-FBP5500-Database-Release)
 
 glintr_100.onnx is a ResNET 101 model trained on [Labelled Faces in the Wild (LFW) Dataset](https://www.kaggle.com/datasets/jessicali9530/lfw-dataset) using the [ArcFace](https://insightface.ai/arcface) loss function
