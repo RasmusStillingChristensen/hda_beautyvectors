@@ -109,6 +109,9 @@ def detect_morph_differentially(suspected_morph_file_path: str, label: ImageLabe
 	try:
 		# Load the suspect morph image
 		sus_img=cv2.imread(suspected_morph_file_path)
+		if sus_img is None:
+			return_code = ReturnCode.InputLocationError
+			return return_code, is_morph, score
 		sus_img=crop_and_align_face(sus_img)
 		if sus_img is None:
 			return_code = ReturnCode.FaceDetectionError
@@ -117,8 +120,11 @@ def detect_morph_differentially(suspected_morph_file_path: str, label: ImageLabe
 		sus_img_array_arc = preprocess_image_arcface(sus_img)
 							  
 
-		# Load the probe image
+    # Load the probe image
 		probe_img=cv2.imread(probe_face_file_path)
+		if probe_img is None:
+			return_code = ReturnCode.InputLocationError
+			return return_code, is_morph, score
 		probe_img=crop_and_align_face(probe_img)
 
 		if probe_img is None:
@@ -126,8 +132,8 @@ def detect_morph_differentially(suspected_morph_file_path: str, label: ImageLabe
 			return return_code, is_morph, score
 		probe_img_array_vgg = preprocess_image_VGG16(probe_img)
 		probe_img_array_arc = preprocess_image_arcface(probe_img)	
-	
-		# Detection
+
+    # Detection
 		B_model.setInput(sus_img_array_vgg)
 		B_vector_sus_img = B_model.forward()
 	
@@ -149,9 +155,11 @@ def detect_morph_differentially(suspected_morph_file_path: str, label: ImageLabe
 		probabilities = SVM_model.predict_proba(diff_vector)
 		score = float(probabilities[0,1])
 		if score>0.5 : is_morph = True
+	
 	except Exception as e:
 		return_code=ReturnCode.UnknownError
 		return return_code, is_morph, score
-
 	return return_code, is_morph, score
+
+initialize("/app/extra_data")
 
