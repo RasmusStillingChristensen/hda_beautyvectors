@@ -1,63 +1,85 @@
+import os
+import numpy as np
+import cv2
+import onnxruntime as ort
+import pickle
+import dlib
 from typing import Tuple
 from enum import IntEnum
-import cv2
-import numpy as np
-import os
-import dlib
-import pickle
 from sklearn import svm
 
-import matplotlib.pyplot as plt
 
+# Global variables
 B_model = None
 FR_model = None
 SVM_model = None
 landmark_predictor = None
+face_crop_model = None
 
 class ReturnCode(IntEnum):
-    Success=0
-    UnknownError=1
-    ConfigError=2
-    RefuseInput=3
-    ExtractError=4
-    ParseError=5
-    TemplateCreationError=6
-    VerifTemplateError=7
-    FaceDetectionError=8
-    NumDataError=9
-    TemplateFormatError=10
-    EnrollDirError=11
-    InputLocationError=12
-    MemoryError=13
-    MatchError=14
-    QualityAssessmentError=15
-    NotImplemented=16
-    VendorError=17
+	Success = 0
+	UnknownError = 1
+	InputLocationError = 2
+	FaceDetectionError = 3
+
 
 class ImageLabel(IntEnum):
-	Unknown=0
-	NonScanned=1
-	Scanned=2
+	Unknown = 0
+	NonScanned = 1
+	Scanned = 2
+
 
 def initialize(alg_extra_data_folder_path: str) -> ReturnCode:
 	return_code = ReturnCode.Success
-	global B_model, FR_model, SVM_model, landmark_predictor
+	global B_model, FR_model, SVM_model, landmark_predictor, face_crop_model
 
 	try:
 		# Construct paths to the models
 		b_model_path = os.path.join(alg_extra_data_folder_path, "VGG16_512.onnx")
 		fr_model_path = os.path.join(alg_extra_data_folder_path, "glintr100.onnx")
-		svm_model_path = os.path.join(alg_extra_data_folder_path, "SVM_FERET_FRGC_MSYNM.pkl")
+		svm_model_path = os.path.join(alg_extra_data_folder_path, "SVM_FERET_FRGC_MSYNM_v2.pkl")
+		
 		landmark_predictor_path = os.path.join(alg_extra_data_folder_path, "shape_predictor_68_face_landmarks.dat")
-        # Load the models
-		B_model = cv2.dnn.readNetFromONNX(b_model_path)
-		FR_model = cv2.dnn.readNetFromONNX(fr_model_path)
+		face_crop_model_path = os.path.join(alg_extra_data_folder_path, "res10_300x300_ssd_iter_140000_fp16.caffemodel")
+		face_crop_config_path = os.path.join(alg_extra_data_folder_path, "deploy.prototxt")
+		
+		# Load ONNX models using onnxruntime
+		providers = ['CUDAExecutionProvider'] if ort.get_device() == 'GPU' else ['CPUExecutionProvider']
+		B_model = ort.InferenceSession(b_model_path)
+		FR_model = ort.InferenceSession(fr_model_path)
+
+		# Load SVM model using pickle
 		with open(svm_model_path, 'rb') as file:
 			SVM_model = pickle.load(file)
+		
+		# Load dlib landmark predictor
 		landmark_predictor = dlib.shape_predictor(landmark_predictor_path)
+		
+		# Load face crop model
+		face_crop_model = cv2.dnn.readNetFromCaffe(face_crop_config_path, face_crop_model_path)
+		
 	except Exception as e:
+		print(f"Error initializing models: {e}")
 		return_code = ReturnCode.InputLocationError
+
 	return return_code
+
+preferred_providers = [
+	'CUDAExecutionProvider',
+	'TensorRTExecutionProvider',
+	'DirectMLExecutionProvider',
+	'OpenVINOExecutionProvider',
+	'CoreMLExecutionProvider',
+	'CPUExecutionProvider' 
+
+def get_best_provider():
+	available_providers = ort.get_available_providers()
+    
+	for provider in preferred_providers:
+		if provider in available_providers:
+			return provider
+    
+	return 'CPUExecutionProvider'
 
 def preprocess_image_arcface(image):
 	input_mean = 127.5
@@ -66,29 +88,16 @@ def preprocess_image_arcface(image):
 	blob = cv2.dnn.blobFromImages([image], 1.0 / input_std, input_size, (input_mean, input_mean, input_mean), swapRB=True)
 	return blob
 
+
 def preprocess_image_VGG16(image):
 	img = cv2.resize(image, (224, 224))
 	img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 	img_array = np.array(img)
-	img_array = np.transpose(img_array, (2, 0, 1))
-	img_array = img_array[np.newaxis, :]
+	img_array = np.transpose(img_array, (2, 0, 1))  # Convert to (C, H, W)
+	img_array = img_array[np.newaxis, :]  # Add batch dimension
 	img_array = img_array.astype(np.float32)
 	return img_array
-	
-def crop_and_align_face(image):
-	global landmark_predictor
-	img_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-	detector = dlib.get_frontal_face_detector() 
-	faces = detector(img_rgb, 1)
-	if len(faces) == 0:
-		return None  # No face detected
-	face = faces[0]
-	landmarks = landmark_predictor(img_rgb, face)
-	landmarks = np.array([[p.x, p.y] for p in landmarks.parts()])
-	aligned_face = align_face(img_rgb, landmarks)
-	x, y, w, h = face.left(), face.top(), face.width(), face.height()
-	cropped_img_rgb = aligned_face[y:y+h, x:x+w]
-	return cropped_img_rgb
+
 
 def align_face(image, landmarks):
 	left_eye = np.mean(landmarks[36:42], axis=0)  # Left eye landmarks
@@ -99,33 +108,58 @@ def align_face(image, landmarks):
 	angle = np.degrees(np.arctan2(dy, dx))
 	M = cv2.getRotationMatrix2D(tuple(eyes_center), angle, scale=1)
 	aligned_image = cv2.warpAffine(image, M, (image.shape[1], image.shape[0]))
-    
+
 	return aligned_image
-	
+
+
+def crop_face(image):
+	global face_crop_model
+	net = face_crop_model
+	h, w = image.shape[:2]
+	blob = cv2.dnn.blobFromImage(image, 1.0, (300, 300), [104.0, 177.0, 123.0], False, False)
+	net.setInput(blob)
+	detections = net.forward()
+	for i in range(detections.shape[2]):
+		confidence = detections[0, 0, i, 2]
+
+		if confidence > 0.5:  # Threshold to filter out weak detections
+			box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
+			(x1, y1, x2, y2) = box.astype("int")
+			x1, y1 = max(0, x1), max(0, y1)
+			x2, y2 = min(w, x2), min(h, y2)
+			cropped_img = image[y1:y2, x1:x2]
+
+			return cropped_img
+
+	return None  # No face detected
+
+
 def detect_morph_differentially(suspected_morph_file_path: str, label: ImageLabel, probe_face_file_path: str) -> Tuple[ReturnCode, bool, float]:
-	return_code=ReturnCode.Success
-	is_morph=False
-	score=0
+	return_code = ReturnCode.Success
+	is_morph = False
+	score = 0
 	try:
 		# Load the suspect morph image
-		sus_img=cv2.imread(suspected_morph_file_path)
+		sus_img = cv2.imread(suspected_morph_file_path)
+
 		if sus_img is None:
 			return_code = ReturnCode.InputLocationError
 			return return_code, is_morph, score
-		sus_img=crop_and_align_face(sus_img)
+		sus_img = crop_face(sus_img)
+
 		if sus_img is None:
 			return_code = ReturnCode.FaceDetectionError
 			return return_code, is_morph, score
 		sus_img_array_vgg = preprocess_image_VGG16(sus_img)
 		sus_img_array_arc = preprocess_image_arcface(sus_img)
-							  
+		
+		# Load the probe image
+		probe_img = cv2.imread(probe_face_file_path)
 
-    # Load the probe image
-		probe_img=cv2.imread(probe_face_file_path)
 		if probe_img is None:
 			return_code = ReturnCode.InputLocationError
 			return return_code, is_morph, score
-		probe_img=crop_and_align_face(probe_img)
+		probe_img = crop_face(probe_img)
 
 		if probe_img is None:
 			return_code = ReturnCode.FaceDetectionError
@@ -133,33 +167,31 @@ def detect_morph_differentially(suspected_morph_file_path: str, label: ImageLabe
 		probe_img_array_vgg = preprocess_image_VGG16(probe_img)
 		probe_img_array_arc = preprocess_image_arcface(probe_img)	
 
-    # Detection
-		B_model.setInput(sus_img_array_vgg)
-		B_vector_sus_img = B_model.forward()
-	
-		FR_model.setInput(sus_img_array_arc)
-		FR_vector_sus_img = FR_model.forward()
-	
-		B_model.setInput(probe_img_array_vgg)
-		B_vector_probe_img = B_model.forward()
-	
-		FR_model.setInput(probe_img_array_arc)
-		FR_vector_probe_img = FR_model.forward()
-	
-		sus_features = np.concatenate((B_vector_sus_img,FR_vector_sus_img))
-		sus_features = sus_features.reshape(1,1024)
-		probe_features = np.concatenate((B_vector_probe_img,FR_vector_probe_img))
-		probe_features = probe_features.reshape(1,1024)
-		diff_vector = sus_features - probe_features
-	
-		probabilities = SVM_model.predict_proba(diff_vector)
-		score = float(probabilities[0,1])
-		if score>0.5 : is_morph = True
-	
-	except Exception as e:
-		return_code=ReturnCode.UnknownError
-		return return_code, is_morph, score
-	return return_code, is_morph, score
+		# Run the onnx models for the suspect image
+		B_vector_sus_img = B_model.run(None, {"input.1": sus_img_array_vgg.astype(np.float32)})[0]
+		FR_vector_sus_img = FR_model.run(None, {"input.1": sus_img_array_arc.astype(np.float32)})[0]
 
-initialize("/app/extra_data")
+		# Run the onnx models for the probe image
+		B_vector_probe_img = B_model.run(None, {"input.1": probe_img_array_vgg.astype(np.float32)})[0]
+		FR_vector_probe_img = FR_model.run(None, {"input.1": probe_img_array_arc.astype(np.float32)})[0]
+
+		# Concatenate feature vectors
+		sus_features = np.concatenate((B_vector_sus_img, FR_vector_sus_img))
+		sus_features = sus_features.reshape(1, 1024)
+		probe_features = np.concatenate((B_vector_probe_img, FR_vector_probe_img))
+		probe_features = probe_features.reshape(1, 1024)
+
+		diff_vector = sus_features - probe_features
+
+		# SVM prediction
+		probabilities = SVM_model.predict_proba(diff_vector)
+		score = float(probabilities[0, 1])
+		if score > 0.5:
+			is_morph = True
+
+	except Exception as e:
+		return_code = ReturnCode.UnknownError
+		return return_code, is_morph, score
+
+	return return_code, is_morph, score
 
