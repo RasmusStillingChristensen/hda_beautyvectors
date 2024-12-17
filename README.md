@@ -56,7 +56,7 @@ This folder contains pre-trained models and supporting files essential for D-MAD
    Compute the difference between the trusted and suspected feature vectors.
 
 5. **Classification**:  
-   Use the SVM model (`SVM_FERET_FRGC_MSYNM_v2.pkl`) to classify the difference vectors and score the likelihood of the suspected image being morphed.
+   Use the SVM model (`SVM_FERET_FRGC_MSYNM.pkl`) to classify the difference vectors and score the likelihood of the suspected image being morphed.
 
 ---
 
