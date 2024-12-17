@@ -19,7 +19,7 @@ This folder contains pre-trained models and supporting files essential for D-MAD
 - **`glintr_100.onnx`**: A ResNet 101 model trained on [LFW Dataset](https://www.kaggle.com/datasets/jessicali9530/lfw-dataset) using the [ArcFace](https://insightface.ai/arcface) loss function for facial recognition.
 - **`shape_predictor_68_face_landmarks.dat`**: A facial landmarking model for image alignment using [dlib](https://pyimagesearch.com/2017/04/03/facial-landmarks-dlib-opencv-python/).
 - **`res10_300x300_ssd_iter_140000_fp16.caffemodel` and `deploy.prototxt`**: Files used for face detection and cropping via OpenCV's DNN module.
-- **`SVM_FERET_FRGC_MSYNM_v2.pkl`**: An SVM model trained on feature differences from multiple datasets and morphing methods.
+- **`SVM_FERET_FRGC_MSYNM.pkl`**: An SVM model trained on feature differences from multiple datasets and morphing methods.
 
 ---
 
