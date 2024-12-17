@@ -37,7 +37,7 @@ def initialize(alg_extra_data_folder_path: str) -> ReturnCode:
 		# Construct paths to the models
 		b_model_path = os.path.join(alg_extra_data_folder_path, "VGG16_512.onnx")
 		fr_model_path = os.path.join(alg_extra_data_folder_path, "glintr100.onnx")
-		svm_model_path = os.path.join(alg_extra_data_folder_path, "SVM_FERET_FRGC_MSYNM_v2.pkl")
+		svm_model_path = os.path.join(alg_extra_data_folder_path, "SVM_FERET_FRGC_MSYNM.pkl")
 		
 		landmark_predictor_path = os.path.join(alg_extra_data_folder_path, "shape_predictor_68_face_landmarks.dat")
 		face_crop_model_path = os.path.join(alg_extra_data_folder_path, "res10_300x300_ssd_iter_140000_fp16.caffemodel")
@@ -70,7 +70,7 @@ preferred_providers = [
 	'DirectMLExecutionProvider',
 	'OpenVINOExecutionProvider',
 	'CoreMLExecutionProvider',
-	'CPUExecutionProvider' 
+	'CPUExecutionProvider' ]
 
 def get_best_provider():
 	available_providers = ort.get_available_providers()
